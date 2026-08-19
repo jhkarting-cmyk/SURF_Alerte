@@ -108,6 +108,10 @@
   .status-alerte { background: color-mix(in srgb, var(--critical) 16%, transparent); color: var(--critical); }
 
   .tile-body { display: flex; align-items: flex-end; gap: 16px; margin-top: 10px; }
+  .tile-cta {
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+    font-size: 12px; font-weight: 600; color: var(--series-1);
+  }
   .tile-value { font-size: 34px; font-weight: 700; line-height: 1; font-variant-numeric: proportional-nums; }
   .tile-value .unit { font-size: 15px; font-weight: 600; color: var(--text-secondary); margin-left: 3px; }
   .tile-meta { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
@@ -550,16 +554,39 @@
     return out;
   }
 
+  // Formate une date/heure ISO ("2026-08-19T15:00" ou "2026-08-19 15:00:00")
+  // en libellé compact pour l'axe des graphiques, ex. "19/08 15h".
+  function formatAxisLabel(iso) {
+    if (!iso) return "";
+    const d = new Date(iso.replace(" ", "T"));
+    if (isNaN(d.getTime())) return "";
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    return `${dd}/${mm} ${hh}h`;
+  }
+
   async function fetchTrend(camp) {
     const end = new Date();
     const start = new Date(end.getTime() - 3 * 24 * 3600 * 1000);
     const fmt = (d) => d.toISOString().slice(0, 10);
     const data = await candhisFetch("getCampTD.php", { camp, dateDeb: fmt(start), dateFin: fmt(end) });
     const entete = data.entete;
-    const heightKey = pickKey(entete, /^HM0$/) || pickKey(entete, /^(H1\/3|Hm0)/);
-    return rowsToObjects(entete, data.results)
-      .map((o) => num(o[heightKey]))
-      .filter((v) => v !== null);
+    // Selon le type de houlographe, la colonne de hauteur s'appelle "H13D"
+    // (non directionnel) ou "HM0" (directionnel) en temps différé — et
+    // "H1/3" / "Hm0" sur d'autres endpoints CANDHIS. On couvre toutes les
+    // variantes documentées, sans quoi le graphique reste vide.
+    const heightKey = pickKey(entete, /^(H13D|HM0|H1\/3|Hm0)/i);
+    const dateKey = pickKey(entete, /^Date/i);
+    const objs = rowsToObjects(entete, data.results);
+    const values = [], times = [];
+    objs.forEach((o) => {
+      const v = num(o[heightKey]);
+      if (v === null) return;
+      values.push(v);
+      times.push(dateKey ? formatAxisLabel(o[dateKey]) : "");
+    });
+    return { values, times };
   }
 
   async function fetchOpenMeteoForecast(lat, lon) {
@@ -572,7 +599,10 @@
     }
     if (!res.ok) throw new Error("Prévision indisponible (HTTP " + res.status + ")");
     const data = await res.json();
-    return (data.hourly && data.hourly.wave_height) || [];
+    const values = (data.hourly && data.hourly.wave_height) || [];
+    const rawTimes = (data.hourly && data.hourly.time) || [];
+    const times = rawTimes.map(formatAxisLabel);
+    return { values, times };
   }
 
   // ---------- status logic ----------
@@ -598,20 +628,40 @@
     </svg>`;
   }
 
-  function lineChartSVG(values, color, w, h, labelEvery) {
-    w = w || 320; h = h || 120;
+  // Graphique en ligne avec échelle d'axe Y (0 → max, unité "m") et deux
+  // repères de dates sur l'axe X (début / fin de la période affichée).
+  function lineChartSVG(values, color, times, w, h) {
+    w = w || 320; h = h || 130;
     if (!values || values.length < 2) return `<div class="info-box">Pas assez de données.</div>`;
-    const min = 0, max = Math.max(...values, 0.5);
+    const padLeft = 34, padRight = 8, padTop = 16, padBottom = 20;
+    const plotW = w - padLeft - padRight;
+    const plotH = h - padTop - padBottom;
+    const min = 0;
+    // Axe Y arrondi à un multiple de 0.5 m au-dessus du max observé, pour
+    // des repères lisibles (0 m / 1.5 m / 3 m…) plutôt que des décimales.
+    const max = Math.max(Math.ceil(Math.max(...values, 0.5) * 2) / 2, 0.5);
     const range = max - min || 1;
     const pts = values.map((v, i) => {
-      const x = (i / (values.length - 1)) * (w - 8) + 4;
-      const y = h - 18 - ((v - min) / range) * (h - 26);
+      const x = padLeft + (values.length === 1 ? 0 : (i / (values.length - 1)) * plotW);
+      const y = padTop + plotH - ((v - min) / range) * plotH;
       return [x, y];
     });
     const path = pts.map((p) => p.join(",")).join(" ");
-    return `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
-      <line x1="0" y1="${h - 18}" x2="${w}" y2="${h - 18}" stroke="var(--baseline)" stroke-width="1"/>
+    const last = pts[pts.length - 1];
+    const lastVal = values[values.length - 1];
+    const firstLabel = times && times[0] ? times[0] : "";
+    const lastLabel = times && times[times.length - 1] ? times[times.length - 1] : "";
+    return `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
+        font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+      <line x1="${padLeft}" y1="${padTop}" x2="${w - padRight}" y2="${padTop}" stroke="var(--border)" stroke-width="1"/>
+      <line x1="${padLeft}" y1="${padTop + plotH}" x2="${w - padRight}" y2="${padTop + plotH}" stroke="var(--baseline)" stroke-width="1"/>
+      <text x="${padLeft - 6}" y="${padTop + 3}" font-size="10" fill="var(--text-muted)" text-anchor="end">${max}&#160;m</text>
+      <text x="${padLeft - 6}" y="${padTop + plotH + 3}" font-size="10" fill="var(--text-muted)" text-anchor="end">0&#160;m</text>
       <polyline points="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${last[0]}" cy="${last[1]}" r="4" fill="${color}" stroke="var(--surface-1)" stroke-width="2"/>
+      <text x="${Math.max(last[0] - 6, padLeft + 20)}" y="${Math.max(last[1] - 9, padTop + 9)}" font-size="11" font-weight="700" fill="var(--text-primary)" text-anchor="end">${lastVal.toFixed(2)}&#160;m</text>
+      ${firstLabel ? `<text x="${padLeft}" y="${h - 5}" font-size="10" fill="var(--text-muted)" text-anchor="start">${firstLabel}</text>` : ""}
+      ${lastLabel ? `<text x="${w - padRight}" y="${h - 5}" font-size="10" fill="var(--text-muted)" text-anchor="end">${lastLabel}</text>` : ""}
     </svg>`;
   }
 
@@ -660,6 +710,7 @@
           <div class="tile-meta" id="meta-${f.camp}"></div>
           <div class="tile-spark" id="spark-${f.camp}"></div>
         </div>
+        <div class="tile-cta">Détails et prévisions 48h ›</div>
       </div>
     `).join("");
 
@@ -770,7 +821,8 @@
 
     try {
       const trend = await fetchTrend(spot.camp);
-      document.getElementById("detail-sparkline").innerHTML = lineChartSVG(trend, "var(--series-1)");
+      document.getElementById("detail-sparkline").innerHTML =
+        lineChartSVG(trend.values, "var(--series-1)", trend.times);
     } catch (e) {
       document.getElementById("detail-sparkline").innerHTML = `<div class="info-box">${e.message}</div>`;
     }
@@ -778,7 +830,8 @@
     if (spot.lat && spot.lon) {
       try {
         const forecast = await fetchOpenMeteoForecast(spot.lat, spot.lon);
-        document.getElementById("detail-forecast").innerHTML = lineChartSVG(forecast, "var(--series-2)");
+        document.getElementById("detail-forecast").innerHTML =
+          lineChartSVG(forecast.values, "var(--series-2)", forecast.times);
       } catch (e) {
         document.getElementById("detail-forecast").innerHTML = `<div class="info-box">${e.message}</div>`;
       }
