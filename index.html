@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#2a78d6" />
+<title>Alerte Vagues CANDHIS</title>
+<link rel="manifest" href="./manifest.json" />
+<link rel="icon" href="./icons/icon-192.png" />
+<link rel="apple-touch-icon" href="./icons/icon-192.png" />
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6; /* blue */
+    --series-2:       #eb6834; /* orange */
+    --good:           #0ca30c;
+    --warning:        #fab219;
+    --critical:       #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --series-2:       #d95926;
+      --good:           #0ca30c;
+      --warning:        #fab219;
+      --critical:       #e66767;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page);
+    color: var(--text-primary);
+    -webkit-tap-highlight-color: transparent;
+  }
+  #app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+
+  header.topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: env(safe-area-inset-top, 16px) 16px 12px;
+    position: sticky; top: 0; background: var(--page); z-index: 5;
+    border-bottom: 1px solid var(--border);
+  }
+  header.topbar h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  header.topbar .icon-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-primary); padding: 6px; }
+  .back-btn { background: none; border: none; font-size: 15px; color: var(--series-1); cursor: pointer; padding: 6px 0; font-weight: 600; }
+
+  main { flex: 1; padding: 12px 16px 32px; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .empty-state { text-align: center; color: var(--text-secondary); padding: 48px 16px; }
+  .empty-state .big { font-size: 40px; margin-bottom: 8px; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--series-1); color: #fff; border: none; border-radius: 10px;
+    padding: 12px 16px; font-size: 15px; font-weight: 600; cursor: pointer; width: 100%;
+  }
+  .btn.secondary { background: transparent; color: var(--series-1); border: 1px solid var(--border); }
+  .btn.danger { background: transparent; color: var(--critical); border: 1px solid var(--border); }
+  .btn:active { opacity: 0.8; }
+
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 600; }
+  .field input[type="text"], .field input[type="password"], .field input[type="number"], .field input[type="search"] {
+    width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--text-primary); font-size: 15px;
+  }
+  .field .hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+  .field-row { display: flex; gap: 8px; align-items: center; }
+
+  /* --- Stat tiles (home) --- */
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px; margin-bottom: 12px; cursor: pointer;
+  }
+  .tile-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .tile-name { font-weight: 700; font-size: 15px; }
+  .tile-updated { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700;
+    padding: 4px 9px; border-radius: 999px; white-space: nowrap;
+  }
+  .status-calme  { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+  .status-monte  { background: color-mix(in srgb, var(--warning) 22%, transparent); color: #8a6100; }
+  @media (prefers-color-scheme: dark) { .status-monte { color: var(--warning); } }
+  .status-alerte { background: color-mix(in srgb, var(--critical) 16%, transparent); color: var(--critical); }
+
+  .tile-body { display: flex; align-items: flex-end; gap: 16px; margin-top: 10px; }
+  .tile-cta {
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+    font-size: 12px; font-weight: 600; color: var(--series-1);
+  }
+  .tile-value { font-size: 34px; font-weight: 700; line-height: 1; font-variant-numeric: proportional-nums; }
+  .tile-value .unit { font-size: 15px; font-weight: 600; color: var(--text-secondary); margin-left: 3px; }
+  .tile-meta { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+  .tile-spark { margin-left: auto; }
+
+  /* --- Search / list --- */
+  .spot-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 4px; border-bottom: 1px solid var(--gridline);
+  }
+  .spot-row-name { font-size: 14px; font-weight: 600; }
+  .spot-row-code { font-size: 12px; color: var(--text-muted); }
+  .add-btn {
+    background: var(--series-1); color: #fff; border: none; border-radius: 8px;
+    width: 30px; height: 30px; font-size: 18px; cursor: pointer; line-height: 1;
+  }
+
+  /* --- Detail --- */
+  .hero-value { font-size: 56px; font-weight: 700; text-align: center; margin: 8px 0 0; }
+  .hero-unit { font-size: 20px; color: var(--text-secondary); font-weight: 600; }
+  .hero-label { text-align: center; color: var(--text-secondary); font-size: 13px; margin-bottom: 18px; }
+  .kpi-row { display: flex; gap: 10px; margin: 16px 0; }
+  .kpi { flex: 1; background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 10px; text-align: center; }
+  .kpi .v { font-size: 17px; font-weight: 700; }
+  .kpi .l { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  .chart-wrap { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin: 16px 0; }
+  .chart-wrap h3 { font-size: 13px; margin: 0 0 8px; color: var(--text-secondary); }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  .section-title { font-size: 13px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; margin: 22px 0 8px; }
+  .info-box { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+  .link-row { display: block; text-align: center; padding: 12px; border-radius: 10px; border: 1px solid var(--border); color: var(--series-1); text-decoration: none; font-weight: 600; font-size: 14px; margin-top: 10px; }
+
+  .toast {
+    position: fixed; left: 16px; right: 16px; bottom: 16px; max-width: 448px; margin: 0 auto;
+    background: var(--text-primary); color: var(--page); padding: 12px 16px; border-radius: 12px;
+    font-size: 13px; z-index: 50; display: none; box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  }
+  .toast.show { display: block; }
+
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  footer.credit { text-align: center; font-size: 11px; color: var(--text-muted); padding: 18px 0 4px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar" id="topbar">
+    <h1 id="page-title">🌊 Alerte Vagues</h1>
+    <button class="icon-btn" id="settings-btn" title="Réglages" aria-label="Réglages">⚙️</button>
+  </header>
+
+  <main>
+    <!-- HOME -->
+    <section class="view active" id="view-home">
+      <div id="home-list" class="stack"></div>
+      <div id="home-empty" class="empty-state" style="display:none">
+        <div class="big">🏄</div>
+        <p>Aucun spot favori pour l'instant.<br>Ajoutez une bouée CANDHIS à suivre.</p>
+      </div>
+      <div class="stack" style="margin-top:16px">
+        <button class="btn" id="add-spot-btn">+ Ajouter un spot</button>
+        <button class="btn secondary" id="refresh-btn">↻ Vérifier maintenant</button>
+      </div>
+      <footer class="credit">Données : Cerema — CANDHIS · Prévisions : Open-Meteo Marine</footer>
+    </section>
+
+    <!-- SEARCH / ADD -->
+    <section class="view" id="view-search">
+      <button class="back-btn" data-back="view-home">‹ Retour</button>
+      <button class="btn secondary" id="nearest-btn" style="margin-top:10px">📍 Bouée la plus proche de moi</button>
+      <div class="field" style="margin-top:14px">
+        <input type="search" id="search-input" placeholder="Ou rechercher un spot (nom ou code)…" />
+      </div>
+      <div id="search-status" class="info-box" style="display:none"></div>
+      <div id="search-results"></div>
+    </section>
+
+    <!-- DETAIL -->
+    <section class="view" id="view-detail">
+      <button class="back-btn" data-back="view-home">‹ Retour</button>
+      <h2 id="detail-name" style="margin:10px 0 0"></h2>
+      <div id="detail-code" class="tile-row-code" style="color:var(--text-muted); font-size:12px;"></div>
+
+      <div class="hero-value" id="detail-value">–</div>
+      <div class="hero-label" id="detail-status-label">Chargement…</div>
+
+      <div class="kpi-row">
+        <div class="kpi"><div class="v" id="kpi-period">–</div><div class="l">Période</div></div>
+        <div class="kpi"><div class="v" id="kpi-dir">–</div><div class="l">Direction</div></div>
+        <div class="kpi"><div class="v" id="kpi-temp">–</div><div class="l">Temp. mer</div></div>
+      </div>
+
+      <div class="section-title">Mesures — 24h glissantes (CANDHIS)</div>
+      <div class="chart-wrap">
+        <h3>Houle mesurée</h3>
+        <div id="detail-height-24h"></div>
+      </div>
+
+      <div class="chart-wrap">
+        <h3>Hauteur max</h3>
+        <div id="detail-maxheight-24h"></div>
+      </div>
+
+      <div class="chart-wrap">
+        <h3>Période</h3>
+        <div id="detail-period-24h"></div>
+      </div>
+
+      <div class="section-title">Prévisions — 48h (Open-Meteo Marine)</div>
+      <div class="chart-wrap">
+        <h3>Houle prévue</h3>
+        <div id="detail-forecast-height"></div>
+      </div>
+
+      <div class="chart-wrap">
+        <h3>Période prévue</h3>
+        <div id="detail-forecast-period"></div>
+      </div>
+
+      <div class="section-title">Seuil d'alerte</div>
+      <div class="field">
+        <div class="field-row">
+          <input type="number" id="threshold-input" step="0.1" min="0.2" max="8" style="max-width:110px" />
+          <span style="color:var(--text-secondary); font-size:14px">m — notification si la houle dépasse ce seuil</span>
+        </div>
+      </div>
+
+      <div class="section-title">Comparer ailleurs</div>
+      <a class="link-row" id="windguru-link" href="#" target="_blank" rel="noopener">Chercher ce spot sur Windguru ↗</a>
+
+      <button class="btn danger" id="remove-spot-btn" style="margin-top:24px">Retirer des favoris</button>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="view" id="view-settings">
+      <button class="back-btn" data-back="view-home">‹ Retour</button>
+      <h2 style="margin:10px 0 16px">Réglages</h2>
+
+      <div class="section-title">Connexion à CANDHIS</div>
+      <div class="info-box">
+        🔒 Connexion sécurisée via un relais serveur : la clé d'accès CANDHIS n'est
+        jamais présente dans cette page ni visible dans le code source. Rien à
+        saisir ici.
+      </div>
+      <button class="btn secondary" id="test-key-btn" style="margin-top:10px">Tester la connexion</button>
+      <div id="key-test-result" class="info-box" style="display:none; margin-top:10px"></div>
+
+      <div class="section-title">Notifications</div>
+      <button class="btn" id="enable-notif-btn">Activer les notifications</button>
+      <div class="info-box" style="margin-top:10px">
+        Les alertes se vérifient quand l'app est ouverte, et en tâche de fond de façon
+        <strong>best-effort</strong> si votre navigateur le permet (Chrome Android, app installée sur
+        l'écran d'accueil). Une couverture 100% fiable en arrière-plan nécessiterait un serveur dédié
+        — possible en évolution future si besoin.
+      </div>
+
+      <div class="section-title">À propos</div>
+      <div class="info-box">
+        Cette application utilise l'API publique CANDHIS du Cerema (réseau national de bouées
+        houlographes) et l'API Open-Meteo Marine (prévisions). Elle n'est pas affiliée au Cerema
+        ni à Windguru.
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // La clé CANDHIS ne vit plus dans le navigateur : toutes les requêtes
+  // passent par le relais serveur /api/candhis (Cloudflare Pages Function,
+  // voir functions/api/candhis.js), qui ajoute la clé côté serveur. Le
+  // navigateur ne la voit jamais, même en inspectant le code source.
+  const PROXY_BASE = "/api/candhis";
+  const OM_BASE = "https://marine-api.open-meteo.com/v1/marine";
+  const LS = {
+    favorites: "candhis_favorites",
+    campListCache: "candhis_camp_list_cache",
+    zoneCache: "candhis_zone_cache",
+    coordsCache: "candhis_coords_cache",
+  };
+  const DEFAULT_THRESHOLD = 1.5;
+
+  // ---------- storage helpers ----------
+  function getJSON(key, fallback) {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+    catch (e) { return fallback; }
+  }
+  function setJSON(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+  function getFavorites() { return getJSON(LS.favorites, []); }
+  function setFavorites(f) { setJSON(LS.favorites, f); mirrorToSW(); }
+
+  // Mirror favorites into IndexedDB so the Service Worker can run periodic checks
+  function mirrorToSW() {
+    try {
+      const req = indexedDB.open("candhis-app", 1);
+      req.onupgradeneeded = () => req.result.createObjectStore("kv");
+      req.onsuccess = () => {
+        const db = req.result;
+        const tx = db.transaction("kv", "readwrite");
+        tx.objectStore("kv").put(getFavorites(), "favorites");
+      };
+    } catch (e) { /* IndexedDB unavailable — background checks simply won't run */ }
+  }
+
+  function toast(msg, ms) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => el.classList.remove("show"), ms || 4000);
+  }
+
+  // ---------- API helpers ----------
+  async function candhisFetch(path, params) {
+    const qs = new URLSearchParams({ endpoint: path, ...(params || {}) }).toString();
+    const url = PROXY_BASE + "?" + qs;
+    let res;
+    try {
+      res = await fetch(url);
+    } catch (e) {
+      throw new Error("Impossible de joindre le relais CANDHIS (réseau).");
+    }
+    let data;
+    try { data = await res.json(); }
+    catch (e) { throw new Error("Réponse inattendue du relais CANDHIS (HTTP " + res.status + ")."); }
+    if (!data.success) throw new Error(data.message || ("Erreur API (HTTP " + res.status + ")"));
+    return data;
+  }
+
+  function rowsToObjects(entete, results) {
+    return (results || []).map((row) => {
+      const o = {};
+      entete.forEach((h, i) => (o[h] = row[i]));
+      return o;
+    });
+  }
+  function pickKey(entete, regex) {
+    return entete.find((h) => regex.test(h));
+  }
+  function num(v) {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // ---------- CANDHIS domain helpers ----------
+  async function fetchCampListeAllTypes() {
+    const cache = getJSON(LS.campListCache, null);
+    const ONE_DAY = 24 * 3600 * 1000;
+    if (cache && Date.now() - cache.ts < ONE_DAY) return cache.list;
+
+    const list = [];
+    for (const type of [0, 1, 2]) {
+      try {
+        const data = await candhisFetch("getCampListe.php", { type });
+        const objs = rowsToObjects(data.entete, data.results);
+        objs.forEach((o) =>
+          list.push({
+            camp: o["Code campagne"],
+            nom: o["Nom"],
+            actif: o["Actif"],
+            type: type,
+          })
+        );
+      } catch (e) { /* type sans données, on continue */ }
+    }
+    setJSON(LS.campListCache, { ts: Date.now(), list });
+    return list;
+  }
+
+  async function fetchCampInfos(camp) {
+    const data = await candhisFetch("getCampInfos.php", { camp });
+    const o = rowsToObjects(data.entete, data.results)[0] || {};
+    return {
+      nom: o["Nom"],
+      lat: num(o["Latitude"]),
+      lon: num(o["Longitude"]),
+      profondeur: o["Profondeur"],
+      directionnel: o["Directionnel"] === "1",
+      capteur: o["Capteur"],
+    };
+  }
+
+  // ---------- Géolocalisation : bouée la plus proche ----------
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // Heuristique simple pour restreindre la recherche à 1-2 zones CANDHIS
+  // plausibles selon la position, plutôt que d'interroger les ~150 bouées
+  // du pays à chaque fois (coût réseau + quota API).
+  function guessZones(lat, lon) {
+    const metro = lat >= 41 && lat <= 51.5 && lon >= -5.5 && lon <= 9.7;
+    if (!metro) {
+      if (lon <= -50) return ["Z05"]; // Antilles, Guyane, Saint-Pierre-et-Miquelon
+      if (lon >= 40 && lon <= 56) return ["Z06"]; // Réunion, Mayotte
+      return ["Z05", "Z06", "Z02", "Z07", "Z04", "Z03"]; // position incertaine : on élargit
+    }
+    if (lon >= 3) return ["Z04"]; // Méditerranée
+    if (lat >= 49) return ["Z03"]; // Manche / Mer du Nord
+    if (lat < 46.5 && lon <= -1) return ["Z07", "Z02"]; // Golfe de Gascogne
+    return ["Z02", "Z07"]; // Bretagne / Atlantique Nord
+  }
+
+  async function fetchZoneCamps(zone) {
+    const cache = getJSON(LS.zoneCache, {});
+    const THIRTY_DAYS = 30 * 24 * 3600 * 1000;
+    if (cache[zone] && Date.now() - cache[zone].ts < THIRTY_DAYS) return cache[zone].camps;
+    const data = await candhisFetch("getCampZone.php", { zone });
+    const camps = (data.results || []).map((row) => (Array.isArray(row) ? row[0] : row));
+    cache[zone] = { ts: Date.now(), camps };
+    setJSON(LS.zoneCache, cache);
+    return camps;
+  }
+
+  async function fetchCoordsFor(camps) {
+    const cache = getJSON(LS.coordsCache, {});
+    const missing = camps.filter((c) => !cache[c]);
+    // Petit pool de concurrence pour ne pas envoyer 40 requêtes d'un coup.
+    const POOL = 4;
+    let i = 0;
+    async function worker() {
+      while (i < missing.length) {
+        const camp = missing[i++];
+        try {
+          const infos = await fetchCampInfos(camp);
+          if (infos.lat !== null && infos.lon !== null) {
+            cache[camp] = { lat: infos.lat, lon: infos.lon, nom: infos.nom };
+          }
+        } catch (e) { /* bouée ignorée si infos indisponibles */ }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(POOL, missing.length) }, worker));
+    if (missing.length) setJSON(LS.coordsCache, cache);
+    return cache;
+  }
+
+  function getCurrentPosition() {
+    return new Promise((resolve, reject) => {
+      if (!("geolocation" in navigator)) { reject(new Error("Géolocalisation non supportée par ce navigateur.")); return; }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        () => reject(new Error("Position refusée ou indisponible. Autorisez la localisation pour ce site.")),
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 5 * 60 * 1000 }
+      );
+    });
+  }
+
+  async function findNearestSpots() {
+    const statusEl = document.getElementById("search-status");
+    const resultsEl = document.getElementById("search-results");
+    statusEl.style.display = "block";
+    resultsEl.innerHTML = "";
+    try {
+      statusEl.textContent = "Localisation en cours…";
+      const pos = await getCurrentPosition();
+
+      statusEl.textContent = "Recherche des bouées à proximité…";
+      if (!campListPromise) campListPromise = fetchCampListeAllTypes();
+      const fullList = await campListPromise; // {camp, nom, type} — bouées avec données temps réel
+      const byCode = new Map(fullList.map((s) => [s.camp, s]));
+
+      const zones = guessZones(pos.lat, pos.lon);
+      const zoneCampsArrays = await Promise.all(zones.map((z) => fetchZoneCamps(z).catch(() => [])));
+      const candidateCodes = [...new Set(zoneCampsArrays.flat())].filter((c) => byCode.has(c));
+
+      if (candidateCodes.length === 0) {
+        statusEl.textContent = "Aucune bouée CANDHIS trouvée près de votre position.";
+        return;
+      }
+
+      statusEl.textContent = `Localisation de ${candidateCodes.length} bouée(s) proches…`;
+      const coords = await fetchCoordsFor(candidateCodes);
+
+      const withDistance = candidateCodes
+        .filter((c) => coords[c])
+        .map((c) => ({
+          ...byCode.get(c),
+          distanceKm: haversineKm(pos.lat, pos.lon, coords[c].lat, coords[c].lon),
+        }))
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+        .slice(0, 8);
+
+      statusEl.style.display = "none";
+      renderSpotRows(withDistance);
+    } catch (e) {
+      statusEl.textContent = e.message;
+    }
+  }
+
+  let lastRenderedSpots = [];
+  function renderSpotRows(spots) {
+    lastRenderedSpots = spots;
+    const resultsEl = document.getElementById("search-results");
+    const favorites = getFavorites();
+    const favCodes = new Set(favorites.map((f) => f.camp));
+    resultsEl.innerHTML = spots.map((s) => `
+      <div class="spot-row">
+        <div>
+          <div class="spot-row-name">${s.nom}</div>
+          <div class="spot-row-code">Code ${s.camp}${s.distanceKm !== undefined ? " · ≈ " + s.distanceKm.toFixed(1) + " km" : ""}</div>
+        </div>
+        ${favCodes.has(s.camp)
+          ? `<span style="color:var(--text-muted); font-size:12px">Ajouté ✓</span>`
+          : `<button class="add-btn" data-camp="${s.camp}" data-nom="${s.nom}" data-type="${s.type}">+</button>`}
+      </div>
+    `).join("") || `<div class="info-box">Aucun résultat.</div>`;
+
+    resultsEl.querySelectorAll(".add-btn").forEach((btn) =>
+      btn.addEventListener("click", () => addFavorite(btn.dataset.camp, btn.dataset.nom, btn.dataset.type))
+    );
+  }
+
+  async function fetchLatestForFavorites(favorites) {
+    const byType = {};
+    favorites.forEach((f) => (byType[f.type] = byType[f.type] || []).push(f));
+    const out = {}; // camp -> {height, period, dir, temp, date}
+
+    for (const type of Object.keys(byType)) {
+      const camps = byType[type].map((s) => s.camp).join(",");
+      try {
+        const data = await candhisFetch("getCampListeTR.php", { type, camp: camps });
+        const entete = data.entete;
+        const campKey = "Campagne";
+        const heightKey = pickKey(entete, /^(H1\/3|Hm0)/);
+        const periodKey = pickKey(entete, /^(TH1\/3|T02)/);
+        const dirKey = pickKey(entete, /^Dir\. au pic/);
+        const tempKey = pickKey(entete, /^Temp\. mer/);
+        const dateKey = pickKey(entete, /^Date/);
+        rowsToObjects(entete, data.results).forEach((o) => {
+          out[o[campKey]] = {
+            height: num(o[heightKey]),
+            period: periodKey ? num(o[periodKey]) : null,
+            dir: dirKey ? num(o[dirKey]) : null,
+            temp: tempKey ? num(o[tempKey]) : null,
+            date: o[dateKey],
+          };
+        });
+      } catch (e) {
+        // on garde les autres types même si celui-ci échoue
+      }
+    }
+    return out;
+  }
+
+  // Formate une date/heure ISO ("2026-08-19T15:00" ou "2026-08-19 15:00:00")
+  // en libellé compact pour l'axe des graphiques, ex. "19/08 15h".
+  function formatAxisLabel(iso) {
+    if (!iso) return "";
+    const d = new Date(iso.replace(" ", "T"));
+    if (isNaN(d.getTime())) return "";
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    return `${dd}/${mm} ${hh}h`;
+  }
+
+  // Cherche, dans l'ordre de préférence donné, la première colonne d'entête
+  // dont le nom COMMENCE par un des candidats (insensible à la casse). Les
+  // noms de colonnes CANDHIS varient selon le type de houlographe et
+  // l'endpoint (ex: hauteur = "H13D" en temps différé non directionnel,
+  // "HM0" en directionnel, "H1/3"/"Hm0" sur d'autres endpoints) — voir la
+  // doc officielle 04_Candhis_API_v1_Utilisateur.pdf.
+  function pickKeyPriority(entete, candidates) {
+    for (const c of candidates) {
+      const re = new RegExp("^" + c.replace(/[/\\^$.*+?()[\]{}|]/g, "\\$&"), "i");
+      const found = entete.find((h) => re.test(h));
+      if (found) return found;
+    }
+    return null;
+  }
+
+  // Mesures CANDHIS (temps différé) sur une fenêtre glissante de 24h. Les
+  // paramètres dateDeb/dateFin de getCampTD.php n'acceptent que des dates
+  // (pas d'heure) : on demande donc 2 jours pleins (hier + aujourd'hui) et
+  // on filtre ensuite côté client aux lignes réellement dans les dernières
+  // 24h, pour obtenir une fenêtre glissante précise.
+  async function fetchMeasured24h(camp) {
+    const now = new Date();
+    const start = new Date(now.getTime() - 2 * 24 * 3600 * 1000);
+    const fmt = (d) => d.toISOString().slice(0, 10);
+    const data = await candhisFetch("getCampTD.php", { camp, dateDeb: fmt(start), dateFin: fmt(now) });
+    const entete = data.entete;
+    const heightKey = pickKeyPriority(entete, ["H13D", "HM0", "H1/3", "Hm0"]);
+    const maxHeightKey = pickKeyPriority(entete, ["HMAXD", "Hmax"]);
+    const periodKey = pickKeyPriority(entete, ["TH13D", "TH1/3", "T02", "TP"]);
+    const dateKey = pickKeyPriority(entete, ["DateHeure", "Date"]);
+    const cutoff = now.getTime() - 24 * 3600 * 1000;
+
+    const height = [], maxHeight = [], period = [], times = [];
+    rowsToObjects(entete, data.results).forEach((o) => {
+      const rawDate = dateKey ? o[dateKey] : null;
+      const t = rawDate ? new Date(String(rawDate).replace(" ", "T")).getTime() : NaN;
+      if (!Number.isFinite(t) || t < cutoff) return; // hors fenêtre 24h glissante
+      const h = num(o[heightKey]);
+      if (h === null) return;
+      height.push(h);
+      maxHeight.push(maxHeightKey ? num(o[maxHeightKey]) : null);
+      period.push(periodKey ? num(o[periodKey]) : null);
+      times.push(formatAxisLabel(rawDate));
+    });
+    return { height, maxHeight, period, times };
+  }
+
+  // Prévisions Open-Meteo Marine — houle ET période, sur 48h.
+  async function fetchForecast48h(lat, lon) {
+    const url = `${OM_BASE}?latitude=${lat}&longitude=${lon}&hourly=wave_height,wave_period&forecast_days=2&timezone=auto`;
+    let res;
+    try {
+      res = await fetch(url);
+    } catch (e) {
+      throw new Error("Impossible de joindre Open-Meteo (réseau).");
+    }
+    if (!res.ok) throw new Error("Prévision indisponible (HTTP " + res.status + ")");
+    const data = await res.json();
+    const height = (data.hourly && data.hourly.wave_height) || [];
+    const period = (data.hourly && data.hourly.wave_period) || [];
+    const rawTimes = (data.hourly && data.hourly.time) || [];
+    const times = rawTimes.map(formatAxisLabel);
+    return { height, period, times };
+  }
+
+  // ---------- status logic ----------
+  function statusFor(height, threshold) {
+    if (height === null || height === undefined) return { key: "inconnu", label: "Pas de donnée", cls: "" };
+    if (height >= threshold) return { key: "alerte", label: "Alerte houle", cls: "status-alerte", icon: "⚠" };
+    if (height >= threshold * 0.7) return { key: "monte", label: "Ça monte", cls: "status-monte", icon: "▲" };
+    return { key: "calme", label: "Calme", cls: "status-calme", icon: "✓" };
+  }
+
+  function sparklineSVG(values, color, w, h) {
+    w = w || 90; h = h || 34;
+    if (!values || values.length < 2) return `<svg width="${w}" height="${h}"></svg>`;
+    const min = Math.min(...values), max = Math.max(...values);
+    const range = max - min || 1;
+    const pts = values.map((v, i) => {
+      const x = (i / (values.length - 1)) * (w - 4) + 2;
+      const y = h - 2 - ((v - min) / range) * (h - 4);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      <polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+  }
+
+  // Choisit un pas d'échelle "rond" pour les repères majeurs (étiquetés),
+  // adapté à l'amplitude des données, en restant un multiple du pas mineur
+  // (0.1) pour que graduations mineures et majeures restent alignées.
+  function chooseMajorStep(dataMax, unit) {
+    if (unit === "s") {
+      if (dataMax <= 4) return 1;
+      if (dataMax <= 10) return 2;
+      return 4;
+    }
+    if (dataMax <= 1) return 0.2;
+    if (dataMax <= 3) return 0.5;
+    if (dataMax <= 6) return 1;
+    return 2;
+  }
+
+  // Graphique en ligne avec échelle d'axe Y précise : repères majeurs
+  // étiquetés (pas adaptatif) + traits intermédiaires tous les 0.1 (m ou s)
+  // sur le bord de l'axe, plus deux repères de dates sur l'axe X.
+  function lineChartSVG(values, color, times, opts) {
+    opts = opts || {};
+    const w = opts.w || 320, h = opts.h || 150;
+    const unit = opts.unit || "m";
+    const decimals = opts.decimals != null ? opts.decimals : 1;
+    const minorStep = opts.minorStep || 0.1;
+
+    // Ne garde que les points valides (certaines colonnes, ex. hauteur max,
+    // peuvent être absentes/nulles sur certaines lignes), en conservant
+    // l'alignement avec les libellés de temps.
+    const pts0 = [];
+    (values || []).forEach((v, i) => {
+      if (v !== null && v !== undefined && Number.isFinite(v)) {
+        pts0.push({ v, t: times && times[i] ? times[i] : "" });
+      }
+    });
+    if (pts0.length < 2) return `<div class="info-box">Pas assez de données.</div>`;
+
+    const dataMax = Math.max(...pts0.map((p) => p.v), minorStep);
+    const majorStep = opts.majorStep || chooseMajorStep(dataMax, unit);
+    const max = Math.max(Math.ceil(dataMax / majorStep) * majorStep, majorStep);
+
+    const padLeft = 36, padRight = 8, padTop = 14, padBottom = 20;
+    const plotW = w - padLeft - padRight;
+    const plotH = h - padTop - padBottom;
+    const range = max || majorStep;
+    const coordX = (i) => padLeft + (pts0.length === 1 ? 0 : (i / (pts0.length - 1)) * plotW);
+    const coordY = (v) => padTop + plotH - (v / range) * plotH;
+
+    const path = pts0.map((p, i) => `${coordX(i).toFixed(1)},${coordY(p.v).toFixed(1)}`).join(" ");
+    const lastIdx = pts0.length - 1;
+    const last = [coordX(lastIdx), coordY(pts0[lastIdx].v)];
+
+    // Repères majeurs : gridline pleine largeur + étiquette de valeur.
+    let majorSvg = "";
+    const majorCount = Math.round(max / majorStep);
+    for (let i = 0; i <= majorCount; i++) {
+      const m = +(i * majorStep).toFixed(6);
+      const y = coordY(m);
+      majorSvg += `<line x1="${padLeft}" y1="${y.toFixed(1)}" x2="${w - padRight}" y2="${y.toFixed(1)}" stroke="${i === 0 ? "var(--baseline)" : "var(--border)"}" stroke-width="1"/>`;
+      majorSvg += `<text x="${padLeft - 6}" y="${(y + 3).toFixed(1)}" font-size="10" fill="var(--text-muted)" text-anchor="end">${m.toFixed(decimals)}&#160;${unit}</text>`;
+    }
+
+    // Traits intermédiaires tous les 0.1 : petites graduations sur le bord
+    // de l'axe (pas de ligne pleine largeur, pour ne pas charger le fond).
+    let minorSvg = "";
+    const minorCount = Math.round(max / minorStep);
+    for (let i = 1; i < minorCount; i++) {
+      const m = +(i * minorStep).toFixed(6);
+      if (Math.abs(m % majorStep) < 1e-6 || Math.abs((m % majorStep) - majorStep) < 1e-6) continue;
+      const y = coordY(m);
+      minorSvg += `<line x1="${padLeft - 4}" y1="${y.toFixed(1)}" x2="${padLeft}" y2="${y.toFixed(1)}" stroke="var(--text-muted)" stroke-width="1"/>`;
+    }
+
+    const firstLabel = pts0[0].t;
+    const lastLabel = pts0[lastIdx].t;
+
+    return `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
+        font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+      ${majorSvg}
+      ${minorSvg}
+      <polyline points="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4" fill="${color}" stroke="var(--surface-1)" stroke-width="2"/>
+      <text x="${Math.max(last[0] - 6, padLeft + 20).toFixed(1)}" y="${Math.max(last[1] - 9, padTop + 9).toFixed(1)}" font-size="11" font-weight="700" fill="var(--text-primary)" text-anchor="end">${pts0[lastIdx].v.toFixed(decimals)}&#160;${unit}</text>
+      ${firstLabel ? `<text x="${padLeft}" y="${h - 5}" font-size="10" fill="var(--text-muted)" text-anchor="start">${firstLabel}</text>` : ""}
+      ${lastLabel ? `<text x="${w - padRight}" y="${h - 5}" font-size="10" fill="var(--text-muted)" text-anchor="end">${lastLabel}</text>` : ""}
+    </svg>`;
+  }
+
+  // ---------- navigation ----------
+  function showView(id) {
+    document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+  }
+  document.querySelectorAll("[data-back]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      showView(btn.dataset.back);
+      if (btn.dataset.back === "view-home") renderHome();
+    })
+  );
+  document.getElementById("settings-btn").addEventListener("click", () => {
+    showView("view-settings");
+  });
+  document.getElementById("add-spot-btn").addEventListener("click", () => {
+    showView("view-search");
+    loadSearchResults("");
+  });
+
+  // ---------- HOME ----------
+  async function renderHome() {
+    const favorites = getFavorites();
+    const listEl = document.getElementById("home-list");
+    const emptyEl = document.getElementById("home-empty");
+    if (favorites.length === 0) {
+      listEl.innerHTML = "";
+      emptyEl.style.display = "block";
+      return;
+    }
+    emptyEl.style.display = "none";
+
+    listEl.innerHTML = favorites.map((f) => `
+      <div class="tile" data-camp="${f.camp}">
+        <div class="tile-top">
+          <div>
+            <div class="tile-name">${f.nom}</div>
+            <div class="tile-updated" id="updated-${f.camp}">Chargement…</div>
+          </div>
+          <span class="status-pill" id="pill-${f.camp}"></span>
+        </div>
+        <div class="tile-body">
+          <div class="tile-value" id="value-${f.camp}">–</div>
+          <div class="tile-meta" id="meta-${f.camp}"></div>
+          <div class="tile-spark" id="spark-${f.camp}"></div>
+        </div>
+        <div class="tile-cta">Détails et prévisions 48h ›</div>
+      </div>
+    `).join("");
+
+    listEl.querySelectorAll(".tile").forEach((el) =>
+      el.addEventListener("click", () => openDetail(el.dataset.camp))
+    );
+
+    try {
+      const latest = await fetchLatestForFavorites(favorites);
+      favorites.forEach((f) => {
+        const d = latest[f.camp];
+        const threshold = f.threshold || DEFAULT_THRESHOLD;
+        const st = statusFor(d ? d.height : null, threshold);
+        const pill = document.getElementById("pill-" + f.camp);
+        pill.className = "status-pill " + st.cls;
+        pill.textContent = (st.icon ? st.icon + " " : "") + st.label;
+        document.getElementById("value-" + f.camp).innerHTML = d && d.height !== null
+          ? `${d.height.toFixed(2)}<span class="unit">m</span>` : "–";
+        document.getElementById("meta-" + f.camp).textContent = d && d.period
+          ? `Période ${d.period.toFixed(1)}s` : "";
+        document.getElementById("updated-" + f.camp).textContent = d && d.date
+          ? "Maj " + d.date : "Pas de donnée récente";
+      });
+      // demande au service worker de faire tourner la vérification de seuils (notifs)
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage("check-waves-now");
+      }
+    } catch (e) {
+      toast(e.message);
+    }
+  }
+
+  document.getElementById("refresh-btn").addEventListener("click", renderHome);
+
+  // ---------- SEARCH ----------
+  let campListPromise = null;
+  async function loadSearchResults(query) {
+    const statusEl = document.getElementById("search-status");
+    const resultsEl = document.getElementById("search-results");
+    statusEl.style.display = "block";
+    statusEl.textContent = "Chargement de la liste des campagnes CANDHIS…";
+    try {
+      if (!campListPromise) campListPromise = fetchCampListeAllTypes();
+      const list = await campListPromise;
+      statusEl.style.display = "none";
+      const q = (query || "").trim().toLowerCase();
+      const filtered = list
+        .filter((s) => !q || s.nom.toLowerCase().includes(q) || s.camp.toLowerCase().includes(q))
+        .slice(0, 60);
+      renderSpotRows(filtered);
+    } catch (e) {
+      statusEl.textContent = e.message;
+    }
+  }
+  document.getElementById("search-input").addEventListener("input", (e) => loadSearchResults(e.target.value));
+  document.getElementById("nearest-btn").addEventListener("click", findNearestSpots);
+
+  async function addFavorite(camp, nom, type) {
+    const favorites = getFavorites();
+    if (favorites.some((f) => f.camp === camp)) return;
+    let lat = null, lon = null;
+    try {
+      const infos = await fetchCampInfos(camp);
+      lat = infos.lat; lon = infos.lon;
+    } catch (e) { /* pas grave, on ajoute quand même */ }
+    favorites.push({ camp, nom, type: parseInt(type, 10), threshold: DEFAULT_THRESHOLD, lat, lon });
+    setFavorites(favorites);
+    toast(nom + " ajouté à vos favoris.");
+    renderSpotRows(lastRenderedSpots); // rafraîchit juste l'état "Ajouté ✓" sans relancer une recherche
+  }
+
+  // ---------- DETAIL ----------
+  let currentDetailCamp = null;
+  async function openDetail(camp) {
+    const favorites = getFavorites();
+    const spot = favorites.find((f) => f.camp === camp);
+    if (!spot) return;
+    currentDetailCamp = camp;
+    document.getElementById("detail-name").textContent = spot.nom;
+    document.getElementById("detail-code").textContent = "Code CANDHIS " + spot.camp;
+    document.getElementById("threshold-input").value = spot.threshold || DEFAULT_THRESHOLD;
+    document.getElementById("detail-value").textContent = "–";
+    document.getElementById("detail-status-label").textContent = "Chargement…";
+    document.getElementById("kpi-period").textContent = "–";
+    document.getElementById("kpi-dir").textContent = "–";
+    document.getElementById("kpi-temp").textContent = "–";
+    document.getElementById("detail-height-24h").innerHTML = "";
+    document.getElementById("detail-maxheight-24h").innerHTML = "";
+    document.getElementById("detail-period-24h").innerHTML = "";
+    document.getElementById("detail-forecast-height").innerHTML = "";
+    document.getElementById("detail-forecast-period").innerHTML = "";
+    document.getElementById("windguru-link").href =
+      "https://www.google.com/search?q=" + encodeURIComponent("windguru " + spot.nom);
+    showView("view-detail");
+
+    try {
+      const latest = await fetchLatestForFavorites([spot]);
+      const d = latest[spot.camp];
+      const threshold = spot.threshold || DEFAULT_THRESHOLD;
+      const st = statusFor(d ? d.height : null, threshold);
+      document.getElementById("detail-value").innerHTML = d && d.height !== null
+        ? `${d.height.toFixed(2)}<span class="hero-unit"> m</span>` : "–";
+      document.getElementById("detail-status-label").textContent =
+        (st.icon ? st.icon + " " : "") + st.label + (d && d.date ? " · maj " + d.date : "");
+      document.getElementById("kpi-period").textContent = d && d.period ? d.period.toFixed(1) + " s" : "–";
+      document.getElementById("kpi-dir").textContent = d && d.dir !== null && d.dir !== undefined ? Math.round(d.dir) + "°" : "–";
+      document.getElementById("kpi-temp").textContent = d && d.temp !== null && d.temp !== undefined ? d.temp.toFixed(1) + " °C" : "–";
+    } catch (e) {
+      toast(e.message);
+    }
+
+    try {
+      const m = await fetchMeasured24h(spot.camp);
+      document.getElementById("detail-height-24h").innerHTML =
+        lineChartSVG(m.height, "var(--series-1)", m.times, { unit: "m" });
+      document.getElementById("detail-maxheight-24h").innerHTML =
+        lineChartSVG(m.maxHeight, "var(--series-1)", m.times, { unit: "m" });
+      document.getElementById("detail-period-24h").innerHTML =
+        lineChartSVG(m.period, "var(--series-1)", m.times, { unit: "s" });
+    } catch (e) {
+      const msg = `<div class="info-box">${e.message}</div>`;
+      document.getElementById("detail-height-24h").innerHTML = msg;
+      document.getElementById("detail-maxheight-24h").innerHTML = msg;
+      document.getElementById("detail-period-24h").innerHTML = msg;
+    }
+
+    if (spot.lat && spot.lon) {
+      try {
+        const f = await fetchForecast48h(spot.lat, spot.lon);
+        document.getElementById("detail-forecast-height").innerHTML =
+          lineChartSVG(f.height, "var(--series-2)", f.times, { unit: "m" });
+        document.getElementById("detail-forecast-period").innerHTML =
+          lineChartSVG(f.period, "var(--series-2)", f.times, { unit: "s" });
+      } catch (e) {
+        const msg = `<div class="info-box">${e.message}</div>`;
+        document.getElementById("detail-forecast-height").innerHTML = msg;
+        document.getElementById("detail-forecast-period").innerHTML = msg;
+      }
+    } else {
+      const msg = `<div class="info-box">Coordonnées du spot indisponibles.</div>`;
+      document.getElementById("detail-forecast-height").innerHTML = msg;
+      document.getElementById("detail-forecast-period").innerHTML = msg;
+    }
+  }
+
+  document.getElementById("threshold-input").addEventListener("change", (e) => {
+    const favorites = getFavorites();
+    const spot = favorites.find((f) => f.camp === currentDetailCamp);
+    if (!spot) return;
+    spot.threshold = parseFloat(e.target.value) || DEFAULT_THRESHOLD;
+    setFavorites(favorites);
+    toast("Seuil mis à jour.");
+  });
+
+  document.getElementById("remove-spot-btn").addEventListener("click", () => {
+    let favorites = getFavorites();
+    favorites = favorites.filter((f) => f.camp !== currentDetailCamp);
+    setFavorites(favorites);
+    showView("view-home");
+    renderHome();
+  });
+
+  // ---------- SETTINGS ----------
+  document.getElementById("test-key-btn").addEventListener("click", async () => {
+    const resultEl = document.getElementById("key-test-result");
+    resultEl.style.display = "block";
+    resultEl.textContent = "Test en cours…";
+    campListPromise = null;
+    setJSON(LS.campListCache, null);
+    try {
+      await candhisFetch("getCampListe.php", { type: 2 });
+      resultEl.textContent = "✓ Relais opérationnel, connexion à CANDHIS réussie.";
+    } catch (e) {
+      resultEl.textContent = "✗ " + e.message;
+    }
+  });
+
+  document.getElementById("enable-notif-btn").addEventListener("click", async () => {
+    if (!("Notification" in window)) { toast("Notifications non supportées par ce navigateur."); return; }
+    const perm = await Notification.requestPermission();
+    if (perm === "granted") {
+      toast("Notifications activées ✓");
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if ("periodicSync" in reg) {
+          await reg.periodicSync.register("check-waves", { minInterval: 60 * 60 * 1000 });
+        }
+      } catch (e) { /* périodicSync non supporté : les vérifications se feront app ouverte */ }
+    } else {
+      toast("Notifications refusées.");
+    }
+  });
+
+  // ---------- boot ----------
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  }
+  mirrorToSW();
+  renderHome();
+  // vérification en tâche de fond légère tant que l'app reste ouverte
+  setInterval(() => { if (getFavorites().length) renderHome(); }, 15 * 60 * 1000);
+})();
+</script>
+</body>
+</html>
