@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "surf-alerte",
+  "compatibility_date": "2026-08-15",
+  "main": "_worker.js",
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Sans ceci, Wrangler traite les variables du tableau de bord Cloudflare
+  // comme un état à synchroniser avec ce fichier à CHAQUE déploiement : comme
+  // CANDHIS_API_KEY n'est (volontairement) pas écrite ici en clair — ce
+  // fichier est public sur GitHub — Wrangler la supprimait à chaque nouveau
+  // build, obligeant à la rajouter à la main à chaque fois. "keep_vars" dit
+  // à Wrangler de laisser tranquilles les variables ajoutées depuis le
+  // tableau de bord au lieu de les écraser. Voir aussi la recommandation
+  // Cloudflare : pour un vrai secret, utiliser le type "Secret" (chiffré)
+  // plutôt que "Text" dans Settings > Variables and Secrets — un secret
+  // n'est de toute façon jamais supprimé par un déploiement, seulement par
+  // une suppression explicite.
+  "keep_vars": true
+}
